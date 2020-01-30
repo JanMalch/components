@@ -7,12 +7,13 @@ import {By} from '@angular/platform-browser';
 import {MatSlideToggle, MatSlideToggleChange, MatSlideToggleModule} from './index';
 import {MAT_SLIDE_TOGGLE_DEFAULT_OPTIONS} from './slide-toggle-config';
 
-describe('MatSlideToggle without forms', () => {
+describe('MDC-based MatSlideToggle without forms', () => {
   beforeEach(fakeAsync(() => {
     TestBed.configureTestingModule({
       imports: [MatSlideToggleModule, BidiModule],
       declarations: [
         SlideToggleBasic,
+        SlideToggleCheckedAndDisabledAttr,
         SlideToggleWithTabindexAttr,
         SlideToggleWithoutLabel,
         SlideToggleProjectedLabel,
@@ -320,6 +321,22 @@ describe('MatSlideToggle without forms', () => {
         .toBe(5, 'Expected tabIndex property to have been set based on the native attribute');
     }));
 
+    it('should add the disabled class if disabled through attribute', () => {
+      const fixture = TestBed.createComponent(SlideToggleCheckedAndDisabledAttr);
+      fixture.detectChanges();
+
+      const switchEl = fixture.nativeElement.querySelector('.mdc-switch');
+      expect(switchEl.classList).toContain('mdc-switch--disabled');
+    });
+
+    it('should add the checked class if checked through attribute', () => {
+      const fixture = TestBed.createComponent(SlideToggleCheckedAndDisabledAttr);
+      fixture.detectChanges();
+
+      const switchEl = fixture.nativeElement.querySelector('.mdc-switch');
+      expect(switchEl.classList).toContain('mdc-switch--checked');
+    });
+
     it('should remove the tabindex from the host element', fakeAsync(() => {
       const fixture = TestBed.createComponent(SlideToggleWithTabindexAttr);
 
@@ -390,7 +407,7 @@ describe('MatSlideToggle without forms', () => {
   });
 });
 
-describe('MatSlideToggle with forms', () => {
+describe('MDC-based MatSlideToggle with forms', () => {
 
   beforeEach(fakeAsync(() => {
     TestBed.configureTestingModule({
@@ -771,6 +788,11 @@ class SlideToggleWithModel {
   isChecked = false;
   isDisabled = false;
 }
+
+@Component({
+  template: `<mat-slide-toggle checked disabled>Label</mat-slide-toggle>`
+})
+class SlideToggleCheckedAndDisabledAttr {}
 
 @Component({
   template: `

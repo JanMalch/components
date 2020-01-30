@@ -6,8 +6,9 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {BooleanInput} from '@angular/cdk/coercion';
 import {Platform} from '@angular/cdk/platform';
-import {Directive, ElementRef, Inject, NgZone, Optional, ViewChild} from '@angular/core';
+import {Directive, ElementRef, HostListener, NgZone, ViewChild} from '@angular/core';
 import {
   CanColor,
   CanColorCtor,
@@ -21,7 +22,6 @@ import {
   mixinDisableRipple,
   RippleAnimationConfig
 } from '@angular/material/core';
-import {ANIMATION_MODULE_TYPE} from '@angular/platform-browser/animations';
 import {numbers} from '@material/ripple';
 
 /** Inputs common to all buttons. */
@@ -79,10 +79,7 @@ export const _MatButtonBaseMixin: CanDisableRippleCtor&CanDisableCtor&CanColorCt
     typeof MatButtonMixinCore = mixinColor(mixinDisabled(mixinDisableRipple(MatButtonMixinCore)));
 
 /** Base class for all buttons.  */
-@Directive({
-  // TODO(devversion): this selector can be removed when we update to Angular 9.0.
-  selector: 'do-not-use-abstract-mat-button-base'
-})
+@Directive()
 export class MatButtonBase extends _MatButtonBaseMixin implements CanDisable, CanColor,
                                                                   CanDisableRipple {
   /** The ripple animation configuration to use for the buttons. */
@@ -99,8 +96,7 @@ export class MatButtonBase extends _MatButtonBaseMixin implements CanDisable, Ca
 
   constructor(
       elementRef: ElementRef, public _platform: Platform, public _ngZone: NgZone,
-      // TODO(devversion): Injection can be removed if angular/angular#32981 is fixed.
-      @Optional() @Inject(ANIMATION_MODULE_TYPE) public _animationMode?: string) {
+      public _animationMode?: string) {
     super(elementRef);
 
     const classList = (elementRef.nativeElement as HTMLElement).classList;
@@ -129,6 +125,9 @@ export class MatButtonBase extends _MatButtonBaseMixin implements CanDisable, Ca
   _isRippleDisabled() {
     return this.disableRipple || this.disabled;
   }
+
+  static ngAcceptInputType_disabled: BooleanInput;
+  static ngAcceptInputType_disableRipple: BooleanInput;
 }
 
 /** Shared inputs by buttons using the `<a>` tag */
@@ -144,7 +143,6 @@ export const MAT_ANCHOR_HOST = {
   // though they have an index, they're not tabbable.
   '[attr.tabindex]': 'disabled ? -1 : (tabIndex || 0)',
   '[attr.aria-disabled]': 'disabled.toString()',
-  '(click)': '_haltDisabledEvents($event)',
   // MDC automatically applies the primary theme color to the button, but we want to support
   // an unthemed version. If color is undefined, apply a CSS class that makes it easy to
   // select and style this "theme".
@@ -154,19 +152,21 @@ export const MAT_ANCHOR_HOST = {
 /**
  * Anchor button base.
  */
-@Directive({
-  // TODO(devversion): this selector can be removed when we update to Angular 9.0.
-  selector: 'do-not-use-abstract-mat-anchor-base'
-})
+@Directive()
 export class MatAnchorBase extends MatButtonBase {
   tabIndex: number;
 
   constructor(elementRef: ElementRef, platform: Platform, ngZone: NgZone,
-              // TODO(devversion): Injection can be removed if angular/angular#32981 is fixed.
-              @Optional() @Inject(ANIMATION_MODULE_TYPE) animationMode?: string) {
+              animationMode?: string) {
     super(elementRef, platform, ngZone, animationMode);
   }
 
+  // We have to use a `HostListener` here in order to support both Ivy and ViewEngine.
+  // In Ivy the `host` bindings will be merged when this class is extended, whereas in
+  // ViewEngine they're overwritten.
+  // TODO(mmalerba): we move this back into `host` once Ivy is turned on by default.
+  // tslint:disable-next-line:no-host-decorator-in-concrete
+  @HostListener('click', ['$event'])
   _haltDisabledEvents(event: Event) {
     // A disabled button shouldn't apply any actions
     if (this.disabled) {

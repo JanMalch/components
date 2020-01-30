@@ -16,7 +16,7 @@ import {
   ViewEncapsulation,
   ElementRef,
 } from '@angular/core';
-import {ComponentFixture, fakeAsync, flush, TestBed} from '@angular/core/testing';
+import {ComponentFixture, fakeAsync, flush, TestBed, tick} from '@angular/core/testing';
 import {
   FormControl,
   FormGroup,
@@ -61,7 +61,7 @@ describe('MatInput without forms', () => {
         'Expected MatInput to set floatingLabel to auto by default.');
   }));
 
-  it('should default to global floating label type', fakeAsync(() => {
+  it('should default to floating label type from deprecated global label options', fakeAsync(() => {
     let fixture = createComponent(MatInputWithId, [{
       provide: MAT_LABEL_GLOBAL_OPTIONS, useValue: {float: 'always'}
     }]);
@@ -69,6 +69,18 @@ describe('MatInput without forms', () => {
 
     let formField = fixture.debugElement.query(By.directive(MatFormField))!
         .componentInstance as MatFormField;
+    expect(formField.floatLabel).toBe('always',
+      'Expected MatInput to set floatingLabel to always from global option.');
+  }));
+
+  it('should default to floating label type provided by global default options', fakeAsync(() => {
+    let fixture = createComponent(MatInputWithId, [{
+      provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: {floatLabel: 'always'}
+    }]);
+    fixture.detectChanges();
+
+    let formField = fixture.debugElement.query(By.directive(MatFormField))!
+      .componentInstance as MatFormField;
     expect(formField.floatLabel).toBe('always',
       'Expected MatInput to set floatingLabel to always from global option.');
   }));
@@ -829,8 +841,8 @@ describe('MatInput without forms', () => {
     expect(inputContainer._shouldAlwaysFloat).toBe(false);
     expect(inputContainer.floatLabel).toBe('always');
 
-    const fakeEvent = Object.assign(createFakeEvent('transitionend'), {propertyName: 'transform'});
-
+    const fakeEvent = createFakeEvent('transitionend');
+    (fakeEvent as any).propertyName = 'transform';
     label.dispatchEvent(fakeEvent);
     fixture.detectChanges();
 
@@ -1445,7 +1457,7 @@ describe('MatInput with appearance', () => {
     fakeDirectionality.value = 'rtl';
     fakeDirectionality.change.next('rtl');
     outlineFixture.detectChanges();
-    flush();
+    tick(16.6); // Angular replaces requestAnimationFrame calls with 16.6ms timeouts in tests.
     outlineFixture.detectChanges();
 
     expect(outlineFixture.componentInstance.formField.updateOutlineGap).toHaveBeenCalled();
@@ -1480,7 +1492,7 @@ describe('MatInput with appearance', () => {
       fakeDirectionality.value = 'rtl';
       fakeDirectionality.change.next('rtl');
       outlineFixture.detectChanges();
-      flush();
+      tick(16.6); // Angular replaces requestAnimationFrame calls with 16.6ms timeouts in tests.
       outlineFixture.detectChanges();
 
       let wrapperElement = outlineFixture.nativeElement;
@@ -1494,7 +1506,7 @@ describe('MatInput with appearance', () => {
       fakeDirectionality.value = 'ltr';
       fakeDirectionality.change.next('ltr');
       outlineFixture.detectChanges();
-      flush();
+      tick(16.6);
       outlineFixture.detectChanges();
 
       wrapperElement = outlineFixture.nativeElement;

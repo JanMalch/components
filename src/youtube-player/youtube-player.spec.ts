@@ -22,7 +22,7 @@ describe('YoutubePlayer', () => {
 
     TestBed.configureTestingModule({
       imports: [YouTubePlayerModule],
-      declarations: [TestApp],
+      declarations: [TestApp, StaticStartEndSecondsApp],
     });
 
     TestBed.compileComponents();
@@ -37,6 +37,7 @@ describe('YoutubePlayer', () => {
 
     afterEach(() => {
       delete window.YT;
+      window.onYouTubeIframeAPIReady = undefined;
     });
 
     it('initializes a youtube player', () => {
@@ -281,17 +282,18 @@ describe('YoutubePlayer', () => {
     beforeEach(() => {
       api = window.YT;
       delete window.YT;
-
-      fixture = TestBed.createComponent(TestApp);
-      testComponent = fixture.debugElement.componentInstance;
-      fixture.detectChanges();
     });
 
     afterEach(() => {
       delete window.YT;
+      window.onYouTubeIframeAPIReady = undefined;
     });
 
     it('waits until the api is ready before initializing', () => {
+      fixture = TestBed.createComponent(TestApp);
+      testComponent = fixture.debugElement.componentInstance;
+      fixture.detectChanges();
+
       expect(playerCtorSpy).not.toHaveBeenCalled();
 
       window.YT = api!;
@@ -306,6 +308,33 @@ describe('YoutubePlayer', () => {
           height: DEFAULT_PLAYER_HEIGHT,
         }));
     });
+
+    it('should not override any pre-existing API loaded callbacks', () => {
+      const spy = jasmine.createSpy('other API loaded spy');
+      window.onYouTubeIframeAPIReady = spy;
+
+      fixture = TestBed.createComponent(TestApp);
+      testComponent = fixture.debugElement.componentInstance;
+      fixture.detectChanges();
+
+      expect(playerCtorSpy).not.toHaveBeenCalled();
+
+      window.YT = api!;
+      window.onYouTubeIframeAPIReady!();
+
+      expect(spy).toHaveBeenCalled();
+    });
+  });
+
+  it('should pick up static startSeconds and endSeconds values', () => {
+    const staticSecondsApp = TestBed.createComponent(StaticStartEndSecondsApp);
+    staticSecondsApp.detectChanges();
+
+    playerSpy.getPlayerState.and.returnValue(window.YT!.PlayerState.CUED);
+    events.onReady({target: playerSpy});
+
+    expect(playerSpy.cueVideoById).toHaveBeenCalledWith(
+      jasmine.objectContaining({startSeconds: 42, endSeconds: 1337}));
   });
 
 });
@@ -340,4 +369,14 @@ class TestApp {
   onError = jasmine.createSpy('onError');
   onApiChange = jasmine.createSpy('onApiChange');
   @ViewChild('player') youtubePlayer: YouTubePlayer;
+}
+
+
+@Component({
+  template: `
+    <youtube-player [videoId]="videoId" [startSeconds]="42"[endSeconds]="1337"></youtube-player>
+  `
+})
+class StaticStartEndSecondsApp {
+  videoId = VIDEO_ID;
 }

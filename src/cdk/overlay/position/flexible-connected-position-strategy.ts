@@ -791,7 +791,7 @@ export class FlexibleConnectedPositionStrategy implements PositionStrategy {
 
     if (this._hasExactPosition()) {
       styles.top = styles.left = '0';
-      styles.bottom = styles.right = '';
+      styles.bottom = styles.right = styles.maxHeight = styles.maxWidth = '';
       styles.width = styles.height = '100%';
     } else {
       const maxHeight = this._overlayRef.getConfig().maxHeight;
@@ -860,8 +860,11 @@ export class FlexibleConnectedPositionStrategy implements PositionStrategy {
   /** Sets positioning styles to the overlay element. */
   private _setOverlayElementStyles(originPoint: Point, position: ConnectedPosition): void {
     const styles = {} as CSSStyleDeclaration;
+    const hasExactPosition = this._hasExactPosition();
+    const hasFlexibleDimensions = this._hasFlexibleDimensions;
+    const config = this._overlayRef.getConfig();
 
-    if (this._hasExactPosition()) {
+    if (hasExactPosition) {
       const scrollPosition = this._viewportRuler.getViewportScrollPosition();
       extendStyles(styles, this._getExactOverlayY(position, originPoint, scrollPosition));
       extendStyles(styles, this._getExactOverlayX(position, originPoint, scrollPosition));
@@ -891,12 +894,22 @@ export class FlexibleConnectedPositionStrategy implements PositionStrategy {
     // If a maxWidth or maxHeight is specified on the overlay, we remove them. We do this because
     // we need these values to both be set to "100%" for the automatic flexible sizing to work.
     // The maxHeight and maxWidth are set on the boundingBox in order to enforce the constraint.
-    if (this._hasFlexibleDimensions && this._overlayRef.getConfig().maxHeight) {
-      styles.maxHeight = '';
+    // Note that this doesn't apply when we have an exact position, in which case we do want to
+    // apply them because they'll be cleared from the bounding box.
+    if (config.maxHeight) {
+      if (hasExactPosition) {
+        styles.maxHeight = coerceCssPixelValue(config.maxHeight);
+      } else if (hasFlexibleDimensions) {
+        styles.maxHeight = '';
+      }
     }
 
-    if (this._hasFlexibleDimensions && this._overlayRef.getConfig().maxWidth) {
-      styles.maxWidth = '';
+    if (config.maxWidth) {
+      if (hasExactPosition) {
+        styles.maxWidth = coerceCssPixelValue(config.maxWidth);
+      } else if (hasFlexibleDimensions) {
+        styles.maxWidth = '';
+      }
     }
 
     extendStyles(this._pane.style, styles);
@@ -908,7 +921,7 @@ export class FlexibleConnectedPositionStrategy implements PositionStrategy {
                             scrollPosition: ViewportScrollPosition) {
     // Reset any existing styles. This is necessary in case the
     // preferred position has changed since the last `apply`.
-    let styles = {top: null, bottom: null} as CSSStyleDeclaration;
+    let styles = {top: '', bottom: ''} as CSSStyleDeclaration;
     let overlayPoint = this._getOverlayPoint(originPoint, this._overlayRect, position);
 
     if (this._isPushed) {
@@ -944,7 +957,7 @@ export class FlexibleConnectedPositionStrategy implements PositionStrategy {
                             scrollPosition: ViewportScrollPosition) {
     // Reset any existing styles. This is necessary in case the preferred position has
     // changed since the last `apply`.
-    let styles = {left: null, right: null} as CSSStyleDeclaration;
+    let styles = {left: '', right: ''} as CSSStyleDeclaration;
     let overlayPoint = this._getOverlayPoint(originPoint, this._overlayRect, position);
 
     if (this._isPushed) {
@@ -1176,12 +1189,13 @@ export interface ConnectedPosition {
 }
 
 /** Shallow-extends a stylesheet object with another stylesheet object. */
-function extendStyles(dest: CSSStyleDeclaration, source: CSSStyleDeclaration): CSSStyleDeclaration {
+function extendStyles(destination: CSSStyleDeclaration,
+                      source: CSSStyleDeclaration): CSSStyleDeclaration {
   for (let key in source) {
     if (source.hasOwnProperty(key)) {
-      dest[key] = source[key];
+      destination[key] = source[key];
     }
   }
 
-  return dest;
+  return destination;
 }

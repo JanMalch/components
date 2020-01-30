@@ -23,13 +23,20 @@ import {
   ViewChild,
   ViewEncapsulation,
 } from '@angular/core';
-import {animationFrameScheduler, asapScheduler, Observable, Subject, Observer} from 'rxjs';
+import {
+  animationFrameScheduler,
+  asapScheduler,
+  Observable,
+  Subject,
+  Observer,
+  Subscription,
+} from 'rxjs';
 import {auditTime, startWith, takeUntil} from 'rxjs/operators';
 import {ScrollDispatcher} from './scroll-dispatcher';
 import {CdkScrollable, ExtendedScrollToOptions} from './scrollable';
 import {CdkVirtualForOf} from './virtual-for-of';
 import {VIRTUAL_SCROLL_STRATEGY, VirtualScrollStrategy} from './virtual-scroll-strategy';
-
+import {ViewportRuler} from './viewport-ruler';
 
 /** Checks if the given ranges are equal. */
 function rangesEqual(r1: ListRange, r2: ListRange): boolean {
@@ -47,7 +54,6 @@ const SCROLL_SCHEDULER =
 
 /** A viewport that virtualizes its scrolling with the help of `CdkVirtualForOf`. */
 @Component({
-  moduleId: module.id,
   selector: 'cdk-virtual-scroll-viewport',
   templateUrl: 'virtual-scroll-viewport.html',
   styleUrls: ['virtual-scroll-viewport.css'],
@@ -143,17 +149,32 @@ export class CdkVirtualScrollViewport extends CdkScrollable implements OnInit, O
   /** A list of functions to run after the next change detection cycle. */
   private _runAfterChangeDetection: Function[] = [];
 
+  /** Subscription to changes in the viewport size. */
+  private _viewportChanges = Subscription.EMPTY;
+
   constructor(public elementRef: ElementRef<HTMLElement>,
               private _changeDetectorRef: ChangeDetectorRef,
               ngZone: NgZone,
               @Optional() @Inject(VIRTUAL_SCROLL_STRATEGY)
                   private _scrollStrategy: VirtualScrollStrategy,
               @Optional() dir: Directionality,
-              scrollDispatcher: ScrollDispatcher) {
+              scrollDispatcher: ScrollDispatcher,
+              /**
+               * @deprecated `viewportRuler` parameter to become required.
+               * @breaking-change 11.0.0
+               */
+              @Optional() viewportRuler?: ViewportRuler) {
     super(elementRef, scrollDispatcher, ngZone, dir);
 
     if (!_scrollStrategy) {
       throw Error('Error: cdk-virtual-scroll-viewport requires the "itemSize" property to be set.');
+    }
+
+    // @breaking-change 11.0.0 Remove null check for `viewportRuler`.
+    if (viewportRuler) {
+      this._viewportChanges = viewportRuler.change().subscribe(() => {
+        this.checkViewportSize();
+      });
     }
   }
 
@@ -189,6 +210,7 @@ export class CdkVirtualScrollViewport extends CdkScrollable implements OnInit, O
     // Complete all subjects
     this._renderedRangeSubject.complete();
     this._detachedSubject.complete();
+    this._viewportChanges.unsubscribe();
 
     super.ngOnDestroy();
   }
@@ -336,8 +358,9 @@ export class CdkVirtualScrollViewport extends CdkScrollable implements OnInit, O
    *     in horizontal mode.
    */
   measureScrollOffset(from?: 'top' | 'left' | 'right' | 'bottom' | 'start' | 'end'): number {
-    return super.measureScrollOffset(
-        from ? from : this.orientation === 'horizontal' ? 'start' : 'top');
+    return from ?
+      super.measureScrollOffset(from) :
+      super.measureScrollOffset(this.orientation === 'horizontal' ? 'start' : 'top');
   }
 
   /** Measure the combined size of all of the rendered items. */
@@ -391,15 +414,15 @@ export class CdkVirtualScrollViewport extends CdkScrollable implements OnInit, O
   private _doChangeDetection() {
     this._isChangeDetectionPending = false;
 
-    // Apply changes to Angular bindings. Note: We must call `markForCheck` to run change detection
-    // from the root, since the repeated items are content projected in. Calling `detectChanges`
-    // instead does not properly check the projected content.
-    this.ngZone.run(() => this._changeDetectorRef.markForCheck());
     // Apply the content transform. The transform can't be set via an Angular binding because
     // bypassSecurityTrustStyle is banned in Google. However the value is safe, it's composed of
     // string literals, a variable that can only be 'X' or 'Y', and user input that is run through
     // the `Number` function first to coerce it to a numeric value.
     this._contentWrapper.nativeElement.style.transform = this._renderedContentTransform;
+    // Apply changes to Angular bindings. Note: We must call `markForCheck` to run change detection
+    // from the root, since the repeated items are content projected in. Calling `detectChanges`
+    // instead does not properly check the projected content.
+    this.ngZone.run(() => this._changeDetectorRef.markForCheck());
 
     const runAfterChangeDetection = this._runAfterChangeDetection;
     this._runAfterChangeDetection = [];

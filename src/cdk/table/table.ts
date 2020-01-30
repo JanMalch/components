@@ -7,7 +7,7 @@
  */
 
 import {Direction, Directionality} from '@angular/cdk/bidi';
-import {coerceBooleanProperty} from '@angular/cdk/coercion';
+import {BooleanInput, coerceBooleanProperty} from '@angular/cdk/coercion';
 import {CollectionViewer, DataSource, isDataSource} from '@angular/cdk/collections';
 import {Platform} from '@angular/cdk/platform';
 import {DOCUMENT} from '@angular/common';
@@ -37,7 +37,14 @@ import {
   ViewContainerRef,
   ViewEncapsulation
 } from '@angular/core';
-import {BehaviorSubject, Observable, of as observableOf, Subject, Subscription} from 'rxjs';
+import {
+  BehaviorSubject,
+  Observable,
+  of as observableOf,
+  Subject,
+  Subscription,
+  isObservable,
+} from 'rxjs';
 import {takeUntil} from 'rxjs/operators';
 import {CdkColumnDef} from './cell';
 import {
@@ -152,7 +159,6 @@ export interface RenderRow<T> {
  * connect function that will return an Observable stream that emits the data array to render.
  */
 @Component({
-  moduleId: module.id,
   selector: 'cdk-table, table[cdk-table]',
   exportAs: 'cdkTable',
   template: CDK_TABLE_TEMPLATE,
@@ -833,7 +839,7 @@ export class CdkTable<T> implements AfterContentChecked, CollectionViewer, OnDes
 
     if (isDataSource(this.dataSource)) {
       dataStream = this.dataSource.connect(this);
-    } else if (this.dataSource instanceof Observable) {
+    } else if (isObservable(this.dataSource)) {
       dataStream = this.dataSource;
     } else if (Array.isArray(this.dataSource)) {
       dataStream = observableOf(this.dataSource);
@@ -1077,6 +1083,8 @@ export class CdkTable<T> implements AfterContentChecked, CollectionViewer, OnDes
           this.updateStickyColumnStyles();
         });
   }
+
+  static ngAcceptInputType_multiTemplateDataRows: BooleanInput;
 }
 
 /** Utility function that gets a merged list of the entries in a QueryList and values of a Set. */

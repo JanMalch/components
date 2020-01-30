@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {coerceArray, coerceBooleanProperty} from '@angular/cdk/coercion';
+import {BooleanInput, coerceArray, coerceBooleanProperty} from '@angular/cdk/coercion';
 import {
   ContentChildren,
   ElementRef,
@@ -20,14 +20,17 @@ import {
   ChangeDetectorRef,
   SkipSelf,
   AfterContentInit,
+  Inject,
 } from '@angular/core';
 import {Directionality} from '@angular/cdk/bidi';
+import {ScrollDispatcher} from '@angular/cdk/scrolling';
 import {CdkDrag, CDK_DROP_LIST} from './drag';
 import {CdkDragDrop, CdkDragEnter, CdkDragExit, CdkDragSortEvent} from '../drag-events';
 import {CdkDropListGroup} from './drop-list-group';
 import {DropListRef} from '../drop-list-ref';
 import {DragRef} from '../drag-ref';
 import {DragDrop} from '../drag-drop';
+import {DropListOrientation, DragAxis, DragDropConfig, CDK_DRAG_CONFIG} from './config';
 import {Subject} from 'rxjs';
 import {startWith, takeUntil} from 'rxjs/operators';
 
@@ -83,7 +86,7 @@ export class CdkDropList<T = any> implements AfterContentInit, OnDestroy {
   @Input('cdkDropListData') data: T;
 
   /** Direction in which the list is oriented. */
-  @Input('cdkDropListOrientation') orientation: 'horizontal' | 'vertical' = 'vertical';
+  @Input('cdkDropListOrientation') orientation: DropListOrientation;
 
   /**
    * Unique ID for the drop zone. Can be used as a reference
@@ -92,7 +95,7 @@ export class CdkDropList<T = any> implements AfterContentInit, OnDestroy {
   @Input() id: string = `cdk-drop-list-${_uniqueIdCounter++}`;
 
   /** Locks the position of the draggable elements inside the container along the specified axis. */
-  @Input('cdkDropListLockAxis') lockAxis: 'x' | 'y';
+  @Input('cdkDropListLockAxis') lockAxis: DragAxis;
 
   /** Whether starting a dragging sequence from this container is disabled. */
   @Input('cdkDropListDisabled')
@@ -100,17 +103,17 @@ export class CdkDropList<T = any> implements AfterContentInit, OnDestroy {
     return this._disabled || (!!this._group && this._group.disabled);
   }
   set disabled(value: boolean) {
-    this._disabled = coerceBooleanProperty(value);
+    // Usually we sync the directive and ref state right before dragging starts, in order to have
+    // a single point of failure and to avoid having to use setters for everything. `disabled` is
+    // a special case, because it can prevent the `beforeStarted` event from firing, which can lock
+    // the user in a disabled state, so we also need to sync it as it's being set.
+    this._dropListRef.disabled = this._disabled = coerceBooleanProperty(value);
   }
-  private _disabled = false;
+  private _disabled: boolean;
 
   /** Whether sorting within this drop list is disabled. */
   @Input('cdkDropListSortingDisabled')
-  get sortingDisabled(): boolean { return this._sortingDisabled; }
-  set sortingDisabled(value: boolean) {
-    this._sortingDisabled = coerceBooleanProperty(value);
-  }
-  private _sortingDisabled = false;
+  sortingDisabled: boolean;
 
   /**
    * Function that is used to determine whether an item
@@ -121,7 +124,7 @@ export class CdkDropList<T = any> implements AfterContentInit, OnDestroy {
 
   /** Whether to auto-scroll the view when the user moves their pointer close to the edges. */
   @Input('cdkDropListAutoScrollDisabled')
-  autoScrollDisabled: boolean = false;
+  autoScrollDisabled: boolean;
 
   /** Emits when the user drops an item inside the container. */
   @Output('cdkDropListDropped')
@@ -148,14 +151,26 @@ export class CdkDropList<T = any> implements AfterContentInit, OnDestroy {
       /** Element that the drop list is attached to. */
       public element: ElementRef<HTMLElement>, dragDrop: DragDrop,
       private _changeDetectorRef: ChangeDetectorRef, @Optional() private _dir?: Directionality,
-      @Optional() @SkipSelf() private _group?: CdkDropListGroup<CdkDropList>) {
+      @Optional() @SkipSelf() private _group?: CdkDropListGroup<CdkDropList>,
+
+      /**
+       * @deprecated _scrollDispatcher parameter to become required.
+       * @breaking-change 11.0.0
+       */
+      private _scrollDispatcher?: ScrollDispatcher,
+      @Optional() @Inject(CDK_DRAG_CONFIG) config?: DragDropConfig) {
     this._dropListRef = dragDrop.createDropList(element);
     this._dropListRef.data = this;
+
+    if (config) {
+      this._assignDefaults(config);
+    }
+
     this._dropListRef.enterPredicate = (drag: DragRef<CdkDrag>, drop: DropListRef<CdkDropList>) => {
       return this.enterPredicate(drag.data, drop.data);
     };
 
-    this._syncInputs(this._dropListRef);
+    this._setupInputSyncSubscription(this._dropListRef);
     this._handleEvents(this._dropListRef);
     CdkDropList._dropLists.push(this);
 
@@ -165,6 +180,14 @@ export class CdkDropList<T = any> implements AfterContentInit, OnDestroy {
   }
 
   ngAfterContentInit() {
+    // @breaking-change 11.0.0 Remove null check for _scrollDispatcher once it's required.
+    if (this._scrollDispatcher) {
+      const scrollableParents = this._scrollDispatcher
+        .getAncestorScrollContainers(this.element)
+        .map(scrollable => scrollable.getElementRef().nativeElement);
+      this._dropListRef.withScrollableParents(scrollableParents);
+    }
+
     this._draggables.changes
       .pipe(startWith(this._draggables), takeUntil(this._destroyed))
       .subscribe((items: QueryList<CdkDrag>) => {
@@ -253,7 +276,7 @@ export class CdkDropList<T = any> implements AfterContentInit, OnDestroy {
   }
 
   /** Syncs the inputs of the CdkDropList with the options of the underlying DropListRef. */
-  private _syncInputs(ref: DropListRef<CdkDropList>) {
+  private _setupInputSyncSubscription(ref: DropListRef<CdkDropList>) {
     if (this._dir) {
       this._dir.change
         .pipe(startWith(this._dir.value), takeUntil(this._destroyed))
@@ -276,8 +299,8 @@ export class CdkDropList<T = any> implements AfterContentInit, OnDestroy {
 
       ref.disabled = this.disabled;
       ref.lockAxis = this.lockAxis;
-      ref.sortingDisabled = this.sortingDisabled;
-      ref.autoScrollDisabled = this.autoScrollDisabled;
+      ref.sortingDisabled = coerceBooleanProperty(this.sortingDisabled);
+      ref.autoScrollDisabled = coerceBooleanProperty(this.autoScrollDisabled);
       ref
         .connectedTo(siblings.filter(drop => drop && drop !== this).map(list => list._dropListRef))
         .withOrientation(this.orientation);
@@ -332,4 +355,23 @@ export class CdkDropList<T = any> implements AfterContentInit, OnDestroy {
     });
   }
 
+  /** Assigns the default input values based on a provided config object. */
+  private _assignDefaults(config: DragDropConfig) {
+    const {
+      lockAxis, draggingDisabled, sortingDisabled, listAutoScrollDisabled, listOrientation
+    } = config;
+
+    this.disabled = draggingDisabled == null ? false : draggingDisabled;
+    this.sortingDisabled = sortingDisabled == null ? false : sortingDisabled;
+    this.autoScrollDisabled = listAutoScrollDisabled == null ? false : listAutoScrollDisabled;
+    this.orientation = listOrientation || 'vertical';
+
+    if (lockAxis) {
+      this.lockAxis = lockAxis;
+    }
+  }
+
+  static ngAcceptInputType_disabled: BooleanInput;
+  static ngAcceptInputType_sortingDisabled: BooleanInput;
+  static ngAcceptInputType_autoScrollDisabled: BooleanInput;
 }

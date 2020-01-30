@@ -8,25 +8,30 @@
 
 import {ActiveDescendantKeyManager, LiveAnnouncer} from '@angular/cdk/a11y';
 import {Directionality} from '@angular/cdk/bidi';
-import {coerceBooleanProperty} from '@angular/cdk/coercion';
+import {
+  BooleanInput,
+  coerceBooleanProperty,
+  coerceNumberProperty,
+  NumberInput
+} from '@angular/cdk/coercion';
 import {SelectionModel} from '@angular/cdk/collections';
 import {
   A,
   DOWN_ARROW,
   END,
   ENTER,
+  hasModifierKey,
   HOME,
   LEFT_ARROW,
   RIGHT_ARROW,
   SPACE,
   UP_ARROW,
-  hasModifierKey,
 } from '@angular/cdk/keycodes';
 import {
   CdkConnectedOverlay,
+  ConnectedPosition,
   Overlay,
   ScrollStrategy,
-  ConnectedPosition,
 } from '@angular/cdk/overlay';
 import {ViewportRuler} from '@angular/cdk/scrolling';
 import {
@@ -146,6 +151,18 @@ export function MAT_SELECT_SCROLL_STRATEGY_PROVIDER_FACTORY(overlay: Overlay):
   return () => overlay.scrollStrategies.reposition();
 }
 
+/** Object that can be used to configure the default options for the select module. */
+export interface MatSelectConfig {
+  /** Whether option centering should be disabled. */
+  disableOptionCentering?: boolean;
+
+  /** Time to wait in milliseconds after the last keystroke before moving focus to an item. */
+  typeaheadDebounceInterval?: number;
+}
+
+/** Injection token that can be used to provide the default options the select module. */
+export const MAT_SELECT_CONFIG = new InjectionToken<MatSelectConfig>('MAT_SELECT_CONFIG');
+
 /** @docs-private */
 export const MAT_SELECT_SCROLL_STRATEGY_PROVIDER = {
   provide: MAT_SELECT_SCROLL_STRATEGY,
@@ -190,7 +207,6 @@ export class MatSelectTrigger {}
 
 
 @Component({
-  moduleId: module.id,
   selector: 'mat-select',
   exportAs: 'matSelect',
   templateUrl: 'select.html',
@@ -337,7 +353,12 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
   /** Panel containing the select options. */
   @ViewChild('panel') panel: ElementRef;
 
-  /** Overlay pane containing the options. */
+  /**
+   * Overlay pane containing the options.
+   * @deprecated To be turned into a private API.
+   * @breaking-change 10.0.0
+   * @docs-private
+   */
   @ViewChild(CdkConnectedOverlay) overlayDir: CdkConnectedOverlay;
 
   /** All of the defined select options. */
@@ -425,7 +446,12 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
   @Input() errorStateMatcher: ErrorStateMatcher;
 
   /** Time to wait in milliseconds after the last keystroke before moving focus to an item. */
-  @Input() typeaheadDebounceInterval: number;
+  @Input()
+  get typeaheadDebounceInterval(): number { return this._typeaheadDebounceInterval; }
+  set typeaheadDebounceInterval(value: number) {
+    this._typeaheadDebounceInterval = coerceNumberProperty(value);
+  }
+  private _typeaheadDebounceInterval: number;
 
   /**
    * Function used to sort the values in a select in multiple mode.
@@ -493,7 +519,8 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
     @Self() @Optional() public ngControl: NgControl,
     @Attribute('tabindex') tabIndex: string,
     @Inject(MAT_SELECT_SCROLL_STRATEGY) scrollStrategyFactory: any,
-    private _liveAnnouncer: LiveAnnouncer) {
+    private _liveAnnouncer: LiveAnnouncer,
+    @Optional() @Inject(MAT_SELECT_CONFIG) defaults?: MatSelectConfig) {
     super(elementRef, _defaultErrorStateMatcher, _parentForm,
           _parentFormGroup, ngControl);
 
@@ -509,6 +536,16 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
 
     // Force setter to be called in case id was not specified.
     this.id = this.id;
+
+    if (defaults) {
+      if (defaults.disableOptionCentering != null) {
+        this.disableOptionCentering = defaults.disableOptionCentering;
+      }
+
+      if (defaults.typeaheadDebounceInterval != null) {
+        this.typeaheadDebounceInterval = defaults.typeaheadDebounceInterval;
+      }
+    }
   }
 
   ngOnInit() {
@@ -569,7 +606,7 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
     }
 
     if (changes['typeaheadDebounceInterval'] && this._keyManager) {
-      this._keyManager.withTypeAhead(this.typeaheadDebounceInterval);
+      this._keyManager.withTypeAhead(this._typeaheadDebounceInterval);
     }
   }
 
@@ -717,7 +754,8 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
     const manager = this._keyManager;
 
     // Open the select on ALT + arrow key to match the native <select>
-    if ((isOpenKey && !hasModifierKey(event)) || ((this.multiple || event.altKey) && isArrowKey)) {
+    if (!manager.isTyping() && (isOpenKey && !hasModifierKey(event)) ||
+      ((this.multiple || event.altKey) && isArrowKey)) {
       event.preventDefault(); // prevents the page from scrolling down when pressing space
       this.open();
     } else if (!this.multiple) {
@@ -743,9 +781,10 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
 
   /** Handles keyboard events when the selected is open. */
   private _handleOpenKeydown(event: KeyboardEvent): void {
+    const manager = this._keyManager;
     const keyCode = event.keyCode;
     const isArrowKey = keyCode === DOWN_ARROW || keyCode === UP_ARROW;
-    const manager = this._keyManager;
+    const isTyping = manager.isTyping();
 
     if (keyCode === HOME || keyCode === END) {
       event.preventDefault();
@@ -754,11 +793,13 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
       // Close the select on ALT + arrow key to match the native <select>
       event.preventDefault();
       this.close();
-    } else if ((keyCode === ENTER || keyCode === SPACE) && manager.activeItem &&
+      // Don't do anything in this case if the user is typing,
+      // because the typing sequence can include the space key.
+    } else if (!isTyping && (keyCode === ENTER || keyCode === SPACE) && manager.activeItem &&
       !hasModifierKey(event)) {
       event.preventDefault();
       manager.activeItem._selectViaInteraction();
-    } else if (this._multiple && keyCode === A && event.ctrlKey) {
+    } else if (!isTyping && this._multiple && keyCode === A && event.ctrlKey) {
       event.preventDefault();
       const hasDeselectedOptions = this.options.some(opt => !opt.disabled && !opt.selected);
 
@@ -889,12 +930,18 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
   /** Sets up a key manager to listen to keyboard events on the overlay panel. */
   private _initKeyManager() {
     this._keyManager = new ActiveDescendantKeyManager<MatOption>(this.options)
-      .withTypeAhead(this.typeaheadDebounceInterval)
+      .withTypeAhead(this._typeaheadDebounceInterval)
       .withVerticalOrientation()
       .withHorizontalOrientation(this._isRtl() ? 'rtl' : 'ltr')
       .withAllowedModifierKeys(['shiftKey']);
 
     this._keyManager.tabOut.pipe(takeUntil(this._destroy)).subscribe(() => {
+      // Select the active item when tabbing away. This is consistent with how the native
+      // select behaves. Note that we only want to do this in single selection mode.
+      if (!this.multiple && this._keyManager.activeItem) {
+        this._keyManager.activeItem._selectViaInteraction();
+      }
+
       // Restore focus to the trigger before closing. Ensures that the focus
       // position won't be lost if the user got focus into the overlay.
       this.focus();
@@ -1044,7 +1091,11 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
   /** Gets the index of the provided option in the option list. */
   private _getOptionIndex(option: MatOption): number | undefined {
     return this.options.reduce((result: number | undefined, current: MatOption, index: number) => {
-      return result === undefined ? (option === current ? index : undefined) : result;
+      if (result !== undefined) {
+        return result;
+      }
+
+      return option === current ? index : undefined;
     }, undefined);
   }
 
@@ -1334,4 +1385,11 @@ export class MatSelect extends _MatSelectMixinBase implements AfterContentInit, 
   get shouldLabelFloat(): boolean {
     return this._panelOpen || !this.empty;
   }
+
+  static ngAcceptInputType_required: BooleanInput;
+  static ngAcceptInputType_multiple: BooleanInput;
+  static ngAcceptInputType_disableOptionCentering: BooleanInput;
+  static ngAcceptInputType_typeaheadDebounceInterval: NumberInput;
+  static ngAcceptInputType_disabled: BooleanInput;
+  static ngAcceptInputType_disableRipple: BooleanInput;
 }

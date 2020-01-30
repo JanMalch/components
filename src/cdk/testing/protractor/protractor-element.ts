@@ -6,10 +6,8 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {ElementDimensions, ModifierKeys, TestElement, TestKey} from '@angular/cdk/testing';
 import {browser, ElementFinder, Key} from 'protractor';
-import {ElementDimensions} from '../element-dimensions';
-import {TestElement, TestKey} from '../test-element';
-import {ModifierKeys} from '../fake-events';
 
 /** Maps the `TestKey` constants to Protractor's `Key` constants. */
 const keyMap = {
@@ -147,5 +145,9 @@ export class ProtractorElement implements TestElement {
           return (Element.prototype.matches ||
                   Element.prototype.msMatchesSelector).call(arguments[0], arguments[1])
           `, this.element, selector);
+  }
+
+  async isFocused(): Promise<boolean> {
+    return this.element.equals(browser.driver.switchTo().activeElement());
   }
 }

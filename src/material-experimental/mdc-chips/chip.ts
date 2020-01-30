@@ -7,7 +7,7 @@
  */
 
 import {Directionality} from '@angular/cdk/bidi';
-import {coerceBooleanProperty} from '@angular/cdk/coercion';
+import {BooleanInput, coerceBooleanProperty} from '@angular/cdk/coercion';
 import {Platform} from '@angular/cdk/platform';
 import {ANIMATION_MODULE_TYPE} from '@angular/platform-browser/animations';
 import {
@@ -26,7 +26,7 @@ import {
   OnDestroy,
   Optional,
   Output,
-  ViewEncapsulation
+  ViewEncapsulation, HostListener
 } from '@angular/core';
 import {
   CanColor,
@@ -46,6 +46,7 @@ import {
 } from '@angular/material/core';
 import {MDCChipAdapter, MDCChipFoundation} from '@material/chips';
 import {numbers} from '@material/ripple';
+import {SPACE, ENTER, hasModifierKey} from '@angular/cdk/keycodes';
 import {Subject} from 'rxjs';
 import {takeUntil} from 'rxjs/operators';
 import {MatChipAvatar, MatChipTrailingIcon, MatChipRemove} from './chip-icons';
@@ -92,7 +93,6 @@ const _MatChipMixinBase:
  * Extended by MatChipOption and MatChipRow for different interaction patterns.
  */
 @Component({
-  moduleId: module.id,
   selector: 'mat-basic-chip, mat-chip',
   inputs: ['color', 'disableRipple'],
   exportAs: 'matChip',
@@ -109,7 +109,6 @@ const _MatChipMixinBase:
     '[id]': 'id',
     '[attr.disabled]': 'disabled || null',
     '[attr.aria-disabled]': 'disabled.toString()',
-    '(transitionend)': '_chipFoundation.handleTransitionEnd($event)'
   },
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -129,6 +128,16 @@ export class MatChip extends _MatChipMixinBase implements AfterContentInit, Afte
 
     /** Whether animations for the chip are enabled. */
   _animationsDisabled: boolean;
+
+  // We have to use a `HostListener` here in order to support both Ivy and ViewEngine.
+  // In Ivy the `host` bindings will be merged when this class is extended, whereas in
+  // ViewEngine they're overwritten.
+  // TODO(mmalerba): we move this back into `host` once Ivy is turned on by default.
+  // tslint:disable-next-line:no-host-decorator-in-concrete
+  @HostListener('transitionend', ['$event'])
+  _handleTransitionEnd(event: TransitionEvent) {
+    this._chipFoundation.handleTransitionEnd(event);
+  }
 
   get _hasFocus() {
     return this._hasFocusInternal;
@@ -242,7 +251,10 @@ export class MatChip extends _MatChipMixinBase implements AfterContentInit, Afte
     addClassToLeadingIcon: (className) => this.leadingIcon.setClass(className, true),
     removeClassFromLeadingIcon: (className) => this.leadingIcon.setClass(className, false),
     eventTargetHasClass: (target: EventTarget | null, className: string) => {
-      return target ? (target as Element).classList.contains(className) : false;
+      // We need to null check the `classList`, because IE and Edge don't support it on SVG elements
+      // and Edge seems to throw for ripple elements, because they're outside the DOM.
+      return (target && (target as Element).classList) ?
+          (target as Element).classList.contains(className) : false;
     },
     notifyInteraction: () => this.interaction.emit(this.id),
     notifySelection: () => {
@@ -254,9 +266,22 @@ export class MatChip extends _MatChipMixinBase implements AfterContentInit, Afte
       // future.
     },
     notifyTrailingIconInteraction: () => this.removeIconInteraction.emit(this.id),
-    notifyRemoval: () => this.removed.emit({chip: this}),
-    getComputedStyleValue: propertyName =>
-        window.getComputedStyle(this._elementRef.nativeElement).getPropertyValue(propertyName),
+    notifyRemoval: () => {
+      this.removed.emit({ chip: this });
+
+      // When MDC removes a chip it just transitions it to `width: 0px` which means that it's still
+      // in the DOM and it's still focusable. Make it `display: none` so users can't tab into it.
+      this._elementRef.nativeElement.style.display = 'none';
+    },
+    getComputedStyleValue: propertyName => {
+      // This function is run when a chip is removed so it might be
+      // invoked during server-side rendering. Add some extra checks just in case.
+      if (typeof window !== 'undefined' && window) {
+        const getComputedStyle = window.getComputedStyle(this._elementRef.nativeElement);
+        return getComputedStyle.getPropertyValue(propertyName);
+      }
+      return '';
+    },
     setStyleProperty: (propertyName: string, value: string) => {
       this._elementRef.nativeElement.style.setProperty(propertyName, value);
     },
@@ -331,15 +356,28 @@ export class MatChip extends _MatChipMixinBase implements AfterContentInit, Afte
   _listenToRemoveIconInteraction() {
     this.removeIcon.interaction
         .pipe(takeUntil(this._destroyed))
-        .subscribe((event) => {
+        .subscribe(event => {
           // The MDC chip foundation calls stopPropagation() for any trailing icon interaction
           // event, even ones it doesn't handle, so we want to avoid passing it keyboard events
-          // for which we have a custom handler.
-          if (this.disabled || (event instanceof KeyboardEvent &&
-            this.HANDLED_KEYS.indexOf(event.keyCode) !== -1)) {
+          // for which we have a custom handler. Note that we assert the type of the event using
+          // the `type`, because `instanceof KeyboardEvent` can throw during server-side rendering.
+          const isKeyboardEvent = event.type.startsWith('key');
+
+          if (this.disabled || (isKeyboardEvent &&
+              this.HANDLED_KEYS.indexOf((event as KeyboardEvent).keyCode) !== -1)) {
             return;
           }
+
           this._chipFoundation.handleTrailingIconInteraction(event);
+
+          if (isKeyboardEvent && !hasModifierKey(event as KeyboardEvent)) {
+            const keyCode = (event as KeyboardEvent).keyCode;
+
+            // Prevent default space and enter presses so we don't scroll the page or submit forms.
+            if (keyCode === SPACE || keyCode === ENTER) {
+              event.preventDefault();
+            }
+          }
         });
   }
 
@@ -389,4 +427,9 @@ export class MatChip extends _MatChipMixinBase implements AfterContentInit, Afte
       this._chipFoundation.handleInteraction(event);
     }
   }
+
+  static ngAcceptInputType_disabled: BooleanInput;
+  static ngAcceptInputType_removable: BooleanInput;
+  static ngAcceptInputType_highlighted: BooleanInput;
+  static ngAcceptInputType_disableRipple: BooleanInput;
 }

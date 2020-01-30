@@ -33,6 +33,11 @@ $mat-chip-remove-size: 18px;
 
   // Required for the ripple to clip properly in Safari.
   transform: translateZ(0);
+
+  // Chips could be set on buttons so we need to reset the user agent styles.
+  border: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
 }
 
 .mat-standard-chip {
@@ -77,7 +82,7 @@ $mat-chip-remove-size: 18px;
     }
   }
 
-  @include cdk-high-contrast {
+  @include cdk-high-contrast(active, off) {
     outline: solid 1px;
 
     &:focus {

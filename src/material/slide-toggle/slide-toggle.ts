@@ -8,7 +8,7 @@
 
 import {FocusMonitor} from '@angular/cdk/a11y';
 import {Directionality} from '@angular/cdk/bidi';
-import {coerceBooleanProperty} from '@angular/cdk/coercion';
+import {BooleanInput, coerceBooleanProperty} from '@angular/cdk/coercion';
 import {
   AfterContentInit,
   Attribute,
@@ -78,7 +78,6 @@ const _MatSlideToggleMixinBase:
 
 /** Represents a slidable "switch" toggle that can be moved between on and off. */
 @Component({
-  moduleId: module.id,
   selector: 'mat-slide-toggle',
   exportAs: 'matSlideToggle',
   host: {
@@ -92,7 +91,6 @@ const _MatSlideToggleMixinBase:
     '[class.mat-disabled]': 'disabled',
     '[class.mat-slide-toggle-label-before]': 'labelPosition == "before"',
     '[class._mat-animation-noopable]': '_animationMode === "NoopAnimations"',
-    '(focus)': '_inputElement.nativeElement.focus()',
   },
   templateUrl: 'slide-toggle.html',
   styleUrls: ['slide-toggle.css'],
@@ -194,7 +192,13 @@ export class MatSlideToggle extends _MatSlideToggleMixinBase implements OnDestro
     this._focusMonitor
       .monitor(this._elementRef, true)
       .subscribe(focusOrigin => {
-        if (!focusOrigin) {
+        // Only forward focus manually when it was received programmatically or through the
+        // keyboard. We should not do this for mouse/touch focus for two reasons:
+        // 1. It can prevent clicks from landing in Chrome (see #18269).
+        // 2. They're already handled by the wrapping `label` element.
+        if (focusOrigin === 'keyboard' || focusOrigin === 'program') {
+          this._inputElement.nativeElement.focus();
+        } else if (!focusOrigin) {
           // When a focused element becomes disabled, the browser *immediately* fires a blur event.
           // Angular does not expect events to be raised during change detection, so any state
           // change (such as a form control's 'ng-touched') will cause a changed-after-checked
@@ -294,4 +298,9 @@ export class MatSlideToggle extends _MatSlideToggleMixinBase implements OnDestro
     // we only trigger an explicit change detection for the slide-toggle view and its children.
     this._changeDetectorRef.detectChanges();
   }
+
+  static ngAcceptInputType_required: BooleanInput;
+  static ngAcceptInputType_checked: BooleanInput;
+  static ngAcceptInputType_disabled: BooleanInput;
+  static ngAcceptInputType_disableRipple: BooleanInput;
 }

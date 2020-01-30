@@ -15,7 +15,7 @@ import {
   OnDestroy,
   QueryList,
 } from '@angular/core';
-import {Observable} from 'rxjs';
+import {isObservable} from 'rxjs';
 import {takeUntil} from 'rxjs/operators';
 
 import {CDK_TREE_NODE_OUTLET_NODE, CdkTreeNodeOutlet} from './outlet';
@@ -26,22 +26,7 @@ import {getTreeControlFunctionsMissingError} from './tree-errors';
  * Nested node is a child of `<cdk-tree>`. It works with nested tree.
  * By using `cdk-nested-tree-node` component in tree node template, children of the parent node will
  * be added in the `cdkTreeNodeOutlet` in tree node template.
- * For example:
- *   ```html
- *   <cdk-nested-tree-node>
- *     {{node.name}}
- *     <ng-template cdkTreeNodeOutlet></ng-template>
- *   </cdk-nested-tree-node>
- *   ```
- * The children of node will be automatically added to `cdkTreeNodeOutlet`, the result dom will be
- * like this:
- *   ```html
- *   <cdk-nested-tree-node>
- *     {{node.name}}
- *      <cdk-nested-tree-node>{{child1.name}}</cdk-nested-tree-node>
- *      <cdk-nested-tree-node>{{child2.name}}</cdk-nested-tree-node>
- *   </cdk-nested-tree-node>
- *   ```
+ * The children of node will be automatically added to `cdkTreeNodeOutlet`.
  */
 @Directive({
   selector: 'cdk-nested-tree-node',
@@ -85,7 +70,7 @@ export class CdkNestedTreeNode<T> extends CdkTreeNode<T> implements AfterContent
     const childrenNodes = this._tree.treeControl.getChildren(this.data);
     if (Array.isArray(childrenNodes)) {
       this.updateChildrenNodes(childrenNodes as T[]);
-    } else if (childrenNodes instanceof Observable) {
+    } else if (isObservable(childrenNodes)) {
       childrenNodes.pipe(takeUntil(this._destroyed))
         .subscribe(result => this.updateChildrenNodes(result));
     }

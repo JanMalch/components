@@ -47,7 +47,6 @@ export type MatCalendarView = 'month' | 'year' | 'multi-year';
 
 /** Default header for MatCalendar */
 @Component({
-  moduleId: module.id,
   selector: 'mat-calendar-header',
   templateUrl: 'calendar-header.html',
   exportAs: 'matCalendarHeader',
@@ -171,7 +170,6 @@ export class MatCalendarHeader<D> {
  * @docs-private
  */
 @Component({
-  moduleId: module.id,
   selector: 'mat-calendar',
   templateUrl: 'calendar.html',
   styleUrls: ['calendar.css'],
@@ -355,15 +353,23 @@ export class MatCalendar<D> implements AfterContentInit, AfterViewChecked, OnDes
 
   /** Updates today's date after an update of the active date */
   updateTodaysDate() {
-    let view = this.currentView == 'month' ? this.monthView :
-            (this.currentView == 'year' ? this.yearView : this.multiYearView);
+    const currentView = this.currentView;
+    let view: MatMonthView<D> | MatYearView<D> | MatMultiYearView<D>;
+
+    if (currentView === 'month') {
+      view = this.monthView;
+    } else if (currentView === 'year') {
+      view = this.yearView;
+    } else {
+      view = this.multiYearView;
+    }
 
     view.ngAfterContentInit();
   }
 
   /** Handles date selection in the month view. */
-  _dateSelected(date: D): void {
-    if (!this._dateAdapter.sameDate(date, this.selected)) {
+  _dateSelected(date: D | null): void {
+    if (date && !this._dateAdapter.sameDate(date, this.selected)) {
       this.selectedChange.emit(date);
     }
   }

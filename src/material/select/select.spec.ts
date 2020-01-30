@@ -29,6 +29,7 @@ import {
   QueryList,
   ViewChild,
   ViewChildren,
+  Provider,
 } from '@angular/core';
 import {
   async,
@@ -63,7 +64,7 @@ import {LiveAnnouncer} from '@angular/cdk/a11y';
 import {Subject, Subscription, EMPTY, Observable} from 'rxjs';
 import {map} from 'rxjs/operators';
 import {MatSelectModule} from './index';
-import {MatSelect} from './select';
+import {MatSelect, MAT_SELECT_CONFIG, MatSelectConfig} from './select';
 import {
   getMatSelectDynamicMultipleError,
   getMatSelectNonArrayValueError,
@@ -88,7 +89,7 @@ describe('MatSelect', () => {
    * overall test time.
    * @param declarations Components to declare for this block
    */
-  function configureMatSelectTestingModule(declarations: any[]) {
+  function configureMatSelectTestingModule(declarations: any[], providers: Provider[] = []) {
     TestBed.configureTestingModule({
       imports: [
         MatFormFieldModule,
@@ -105,6 +106,7 @@ describe('MatSelect', () => {
             scrolled: () => scrolledSubject.asObservable(),
           }),
         },
+        ...providers
       ],
     }).compileComponents();
 
@@ -509,6 +511,31 @@ describe('MatSelect', () => {
           expect(options[5].selected).toBe(true, 'Expected sixth option to be selected.');
           expect(formControl.value).toBe(options[5].value,
             'Expected value from sixth option to have been set on the model.');
+        }));
+
+        it('should not open the select when pressing space while typing', fakeAsync(() => {
+          const selectInstance = fixture.componentInstance.select;
+
+          fixture.componentInstance.typeaheadDebounceInterval = DEFAULT_TYPEAHEAD_DEBOUNCE_INTERVAL;
+          fixture.detectChanges();
+
+          expect(selectInstance.panelOpen).toBe(false, 'Expected select to be closed on init.');
+
+          dispatchEvent(select, createKeyboardEvent('keydown', 80, 'p'));
+          tick(DEFAULT_TYPEAHEAD_DEBOUNCE_INTERVAL / 2);
+          fixture.detectChanges();
+
+          dispatchKeyboardEvent(select, 'keydown', SPACE);
+          fixture.detectChanges();
+
+          expect(selectInstance.panelOpen).toBe(false,
+              'Expected select to remain closed after space was pressed.');
+
+          tick(DEFAULT_TYPEAHEAD_DEBOUNCE_INTERVAL / 2);
+          fixture.detectChanges();
+
+          expect(selectInstance.panelOpen).toBe(false,
+              'Expected select to be closed when the timer runs out.');
         }));
 
         it('should be able to customize the typeahead debounce interval', fakeAsync(() => {
@@ -3075,6 +3102,58 @@ describe('MatSelect', () => {
       expect(spy).toHaveBeenCalledWith('steak-0');
     }));
 
+    it('should set the value when options are clicked', fakeAsync(() => {
+      const fixture = TestBed.createComponent(BasicSelectWithoutForms);
+      fixture.detectChanges();
+      const select = fixture.nativeElement.querySelector('.mat-select');
+
+      expect(fixture.componentInstance.selectedFood).toBeFalsy();
+
+      const trigger = fixture.nativeElement.querySelector('.mat-select-trigger');
+
+      trigger.click();
+      fixture.detectChanges();
+      flush();
+
+      dispatchKeyboardEvent(select, 'keydown', DOWN_ARROW);
+      fixture.detectChanges();
+      dispatchKeyboardEvent(select, 'keydown', DOWN_ARROW);
+      fixture.detectChanges();
+
+      dispatchKeyboardEvent(select, 'keydown', TAB);
+      fixture.detectChanges();
+      flush();
+
+      expect(fixture.componentInstance.selectedFood).toBe('sandwich-2');
+      expect(fixture.componentInstance.select.value).toBe('sandwich-2');
+      expect(trigger.textContent).toContain('Sandwich');
+    }));
+
+    it('should not change the multiple value selection when tabbing away', fakeAsync(() => {
+      const fixture = TestBed.createComponent(BasicSelectWithoutFormsMultiple);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.selectedFoods).toBeFalsy('Expected no value on init.');
+
+      const select = fixture.nativeElement.querySelector('.mat-select');
+      const trigger = fixture.nativeElement.querySelector('.mat-select-trigger');
+      trigger.click();
+      fixture.detectChanges();
+
+      dispatchKeyboardEvent(select, 'keydown', DOWN_ARROW);
+      fixture.detectChanges();
+      dispatchKeyboardEvent(select, 'keydown', DOWN_ARROW);
+      fixture.detectChanges();
+
+      dispatchKeyboardEvent(select, 'keydown', TAB);
+      fixture.detectChanges();
+      flush();
+
+      expect(fixture.componentInstance.selectedFoods)
+          .toBeFalsy('Expected no value after tabbing away.');
+    }));
+
+
   });
 
   describe('with option centering disabled', () => {
@@ -4369,6 +4448,22 @@ describe('MatSelect', () => {
       }).not.toThrow();
     }));
 
+  });
+
+  it('should be able to provide default values through an injection token', () => {
+    configureMatSelectTestingModule([NgModelSelect], [{
+      provide: MAT_SELECT_CONFIG,
+      useValue: {
+        disableOptionCentering: true,
+        typeaheadDebounceInterval: 1337
+      } as MatSelectConfig
+    }]);
+    const fixture = TestBed.createComponent(NgModelSelect);
+    fixture.detectChanges();
+    const select = fixture.componentInstance.select;
+
+    expect(select.disableOptionCentering).toBe(true);
+    expect(select.typeaheadDebounceInterval).toBe(1337);
   });
 });
 

@@ -22,7 +22,7 @@ import {
   Input,
 } from '@angular/core';
 import {Direction, Directionality} from '@angular/cdk/bidi';
-import {coerceNumberProperty} from '@angular/cdk/coercion';
+import {coerceNumberProperty, NumberInput} from '@angular/cdk/coercion';
 import {ViewportRuler} from '@angular/cdk/scrolling';
 import {FocusKeyManager, FocusableOption} from '@angular/cdk/a11y';
 import {END, ENTER, HOME, SPACE, hasModifierKey} from '@angular/cdk/keycodes';
@@ -68,10 +68,7 @@ export type MatPaginatedTabHeaderItem = FocusableOption & {elementRef: ElementRe
  * Base class for a tab header that supported pagination.
  * @docs-private
  */
-@Directive({
-  // TODO(crisbeto): this selector can be removed when we update to Angular 9.0.
-  selector: 'do-not-use-abstract-mat-paginated-tab-header'
-})
+@Directive()
 export abstract class MatPaginatedTabHeader implements AfterContentChecked, AfterContentInit,
   AfterViewInit, OnDestroy {
   abstract _items: QueryList<MatPaginatedTabHeaderItem>;
@@ -552,7 +549,13 @@ export abstract class MatPaginatedTabHeader implements AfterContentChecked, Afte
    * Starts scrolling the header after a certain amount of time.
    * @param direction In which direction the paginator should be scrolled.
    */
-  _handlePaginatorPress(direction: ScrollDirection) {
+  _handlePaginatorPress(direction: ScrollDirection, mouseEvent?: MouseEvent) {
+    // Don't start auto scrolling for right mouse button clicks. Note that we shouldn't have to
+    // null check the `button`, but we do it so we don't break tests that use fake events.
+    if (mouseEvent && mouseEvent.button != null && mouseEvent.button !== 0) {
+      return;
+    }
+
     // Avoid overlapping timers.
     this._stopInterval();
 
@@ -590,4 +593,6 @@ export abstract class MatPaginatedTabHeader implements AfterContentChecked, Afte
 
     return {maxScrollDistance, distance: this._scrollDistance};
   }
+
+  static ngAcceptInputType_selectedIndex: NumberInput;
 }

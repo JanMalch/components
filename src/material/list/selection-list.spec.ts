@@ -1,4 +1,4 @@
-import {DOWN_ARROW, SPACE, ENTER, UP_ARROW, HOME, END, A} from '@angular/cdk/keycodes';
+import {DOWN_ARROW, SPACE, ENTER, UP_ARROW, HOME, END, A, D} from '@angular/cdk/keycodes';
 import {
   createKeyboardEvent,
   dispatchFakeEvent,
@@ -40,6 +40,7 @@ describe('MatSelectionList without forms', () => {
           SelectionListWithOnlyOneOption,
           SelectionListWithIndirectChildOptions,
           SelectionListWithSelectedOptionAndValue,
+          SelectionListWithIndirectDescendantLines,
         ],
       });
 
@@ -185,6 +186,16 @@ describe('MatSelectionList without forms', () => {
       fixture.detectChanges();
 
       expect(selectList.selected.length).toBe(0);
+    });
+
+    it('should not add the mat-list-single-selected-option class (in multiple mode)', () => {
+      let testListItem = listOptions[2].injector.get<MatListOption>(MatListOption);
+
+      testListItem._handleClick();
+      fixture.detectChanges();
+
+      expect(listOptions[2].nativeElement.classList.contains('mat-list-single-selected-option'))
+          .toBe(false);
     });
 
     it('should not allow selection of disabled items', () => {
@@ -500,6 +511,44 @@ describe('MatSelectionList without forms', () => {
       expect(manager.activeItemIndex).toBe(3);
     }));
 
+    it('should be able to skip to an item by typing', fakeAsync(() => {
+      const manager = selectionList.componentInstance._keyManager;
+
+      expect(manager.activeItemIndex).not.toBe(3);
+
+      const event = createKeyboardEvent('keydown', D, 'd');
+      selectionList.componentInstance._keydown(event);
+      fixture.detectChanges();
+      tick(200);
+
+      expect(manager.activeItemIndex).toBe(3);
+    }));
+
+    it('should not select items while using the typeahead', fakeAsync(() => {
+      const manager = selectionList.componentInstance._keyManager;
+      const testListItem = listOptions[1].nativeElement as HTMLElement;
+      const model =
+          selectionList.injector.get<MatSelectionList>(MatSelectionList).selectedOptions;
+
+      dispatchFakeEvent(testListItem, 'focus');
+      fixture.detectChanges();
+
+      expect(manager.activeItemIndex).toBe(1);
+      expect(model.isEmpty()).toBe(true);
+
+      selectionList.componentInstance._keydown(createKeyboardEvent('keydown', D, 'd'));
+      fixture.detectChanges();
+      tick(100); // Tick only half the typeahead timeout.
+
+      selectionList.componentInstance._keydown(
+        createKeyboardEvent('keydown', SPACE, undefined, testListItem));
+      fixture.detectChanges();
+      tick(100); // Tick the rest of the timeout.
+
+      expect(manager.activeItemIndex).toBe(3);
+      expect(model.isEmpty()).toBe(true);
+    }));
+
     it('should be able to select all options', () => {
       const list: MatSelectionList = selectionList.componentInstance;
 
@@ -601,6 +650,14 @@ describe('MatSelectionList without forms', () => {
       const listItemEl = componentFixture.debugElement.query(By.directive(MatListOption))!;
       expect(listItemEl.componentInstance.selected).toBe(true);
       expect(listItemEl.componentInstance.value).toBe(componentFixture.componentInstance.itemValue);
+    });
+
+    it('should pick up indirect descendant lines', () => {
+      const componentFixture = TestBed.createComponent(SelectionListWithIndirectDescendantLines);
+      componentFixture.detectChanges();
+
+      const option = componentFixture.nativeElement.querySelector('mat-list-option');
+      expect(option.classList).toContain('mat-2-line');
     });
 
   });
@@ -833,6 +890,80 @@ describe('MatSelectionList without forms', () => {
 
       const listOption = fixture.nativeElement.querySelector('.mat-list-option');
       expect(listOption.classList).toContain('mat-list-item-with-avatar');
+    });
+  });
+
+  describe('with single selection', () => {
+    let fixture: ComponentFixture<SelectionListWithListOptions>;
+    let listOption: DebugElement[];
+    let selectionList: DebugElement;
+
+    beforeEach(async(() => {
+      TestBed.configureTestingModule({
+        imports: [MatListModule],
+        declarations: [
+          SelectionListWithListOptions,
+        ],
+      }).compileComponents();
+
+      fixture = TestBed.createComponent(SelectionListWithListOptions);
+      fixture.componentInstance.multiple = false;
+      listOption = fixture.debugElement.queryAll(By.directive(MatListOption));
+      selectionList = fixture.debugElement.query(By.directive(MatSelectionList))!;
+      fixture.detectChanges();
+    }));
+
+    it('should select one option at a time', () => {
+      const testListItem1 = listOption[1].injector.get<MatListOption>(MatListOption);
+      const testListItem2 = listOption[2].injector.get<MatListOption>(MatListOption);
+      const selectList =
+          selectionList.injector.get<MatSelectionList>(MatSelectionList).selectedOptions;
+
+      expect(selectList.selected.length).toBe(0);
+
+      dispatchFakeEvent(testListItem1._getHostElement(), 'click');
+      fixture.detectChanges();
+
+      expect(selectList.selected).toEqual([testListItem1]);
+      expect(listOption[1].nativeElement.classList.contains('mat-list-single-selected-option'))
+          .toBe(true);
+
+      dispatchFakeEvent(testListItem2._getHostElement(), 'click');
+      fixture.detectChanges();
+
+      expect(selectList.selected).toEqual([testListItem2]);
+      expect(listOption[1].nativeElement.classList.contains('mat-list-single-selected-option'))
+          .toBe(false);
+      expect(listOption[2].nativeElement.classList.contains('mat-list-single-selected-option'))
+          .toBe(true);
+    });
+
+    it('should not show check boxes', () => {
+      expect(fixture.nativeElement.querySelector('mat-pseudo-checkbox')).toBeFalsy();
+    });
+
+    it('should not deselect the target option on click', () => {
+      const testListItem1 = listOption[1].injector.get<MatListOption>(MatListOption);
+      const selectList =
+          selectionList.injector.get<MatSelectionList>(MatSelectionList).selectedOptions;
+
+      expect(selectList.selected.length).toBe(0);
+
+      dispatchFakeEvent(testListItem1._getHostElement(), 'click');
+      fixture.detectChanges();
+
+      expect(selectList.selected).toEqual([testListItem1]);
+
+      dispatchFakeEvent(testListItem1._getHostElement(), 'click');
+      fixture.detectChanges();
+
+      expect(selectList.selected).toEqual([testListItem1]);
+    });
+
+    it('throws an exception when toggling single/multiple mode after bootstrap', () => {
+      fixture.componentInstance.multiple = true;
+      expect(() => fixture.detectChanges()).toThrow(new Error(
+          'Cannot change `multiple` mode of mat-selection-list after initialization.'));
     });
   });
 });
@@ -1208,7 +1339,8 @@ describe('MatSelectionList with forms', () => {
     id="selection-list-1"
     (selectionChange)="onValueChange($event)"
     [disableRipple]="listRippleDisabled"
-    [color]="selectionListColor">
+    [color]="selectionListColor"
+    [multiple]="multiple">
     <mat-list-option checkboxPosition="before" disabled="true" value="inbox"
                      [color]="firstOptionColor">
       Inbox (disabled selection-option)
@@ -1227,6 +1359,7 @@ describe('MatSelectionList with forms', () => {
 class SelectionListWithListOptions {
   showLastOption: boolean = true;
   listRippleDisabled = false;
+  multiple = true;
   selectionListColor: ThemePalette;
   firstOptionColor: ThemePalette;
 
@@ -1444,4 +1577,19 @@ class SelectionListWithIcon {
 })
 class SelectionListWithIndirectChildOptions {
   @ViewChildren(MatListOption) optionInstances: QueryList<MatListOption>;
+}
+
+// Note the blank `ngSwitch` which we need in order to hit the bug that we're testing.
+@Component({
+  template: `
+  <mat-selection-list>
+    <mat-list-option>
+      <ng-container [ngSwitch]="true">
+        <h3 mat-line>Item</h3>
+        <p mat-line>Item description</p>
+      </ng-container>
+    </mat-list-option>
+  </mat-selection-list>`
+})
+class SelectionListWithIndirectDescendantLines {
 }

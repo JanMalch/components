@@ -38,7 +38,6 @@ import {MatAccordionTogglePosition} from './accordion-base';
  * This component corresponds to the header element of an `<mat-expansion-panel>`.
  */
 @Component({
-  moduleId: module.id,
   selector: 'mat-expansion-panel-header',
   styleUrls: ['./expansion-panel-header.css'],
   templateUrl: './expansion-panel-header.html',
@@ -149,7 +148,9 @@ export class MatExpansionPanelHeader implements OnDestroy, FocusableOption {
 
   /** Toggles the expanded state of the panel. */
   _toggle(): void {
-    this.panel.toggle();
+    if (!this.disabled) {
+      this.panel.toggle();
+    }
   }
 
   /** Gets whether the panel is expanded. */

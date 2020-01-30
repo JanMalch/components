@@ -9,10 +9,12 @@ export declare class MatProgressBar extends _MatProgressBarMixinBase implements 
     _primaryValueBar: ElementRef;
     _rectangleFillValue: string;
     animationEnd: EventEmitter<ProgressAnimationEnd>;
-    bufferValue: number;
+    get bufferValue(): number;
+    set bufferValue(v: number);
     mode: ProgressBarMode;
     progressbarId: string;
-    value: number;
+    get value(): number;
+    set value(v: number);
     constructor(_elementRef: ElementRef, _ngZone: NgZone, _animationMode?: string | undefined,
     location?: MatProgressBarLocation);
     _bufferTransform(): {
@@ -23,6 +25,9 @@ export declare class MatProgressBar extends _MatProgressBarMixinBase implements 
     };
     ngAfterViewInit(): void;
     ngOnDestroy(): void;
+    static ngAcceptInputType_value: NumberInput;
+    static ɵcmp: i0.ɵɵComponentDefWithMeta<MatProgressBar, "mat-progress-bar", ["matProgressBar"], { "color": "color"; "value": "value"; "bufferValue": "bufferValue"; "mode": "mode"; }, { "animationEnd": "animationEnd"; }, never>;
+    static ɵfac: i0.ɵɵFactoryDef<MatProgressBar>;
 }
 
 export interface MatProgressBarLocation {
@@ -30,6 +35,8 @@ export interface MatProgressBarLocation {
 }
 
 export declare class MatProgressBarModule {
+    static ɵinj: i0.ɵɵInjectorDef<MatProgressBarModule>;
+    static ɵmod: i0.ɵɵNgModuleDefWithMeta<MatProgressBarModule, [typeof i1.MatProgressBar], [typeof i2.CommonModule, typeof i3.MatCommonModule], [typeof i1.MatProgressBar, typeof i3.MatCommonModule]>;
 }
 
 export interface ProgressAnimationEnd {
